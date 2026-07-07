@@ -38,7 +38,13 @@ function imgUrl(o) {
 }
 
 // ===== SRT to VTT Converter =====
-
+function srt2vtt(srt) {
+  // Add WEBVTT header
+  var vtt = 'WEBVTT\n\n';
+  // Replace SRT timing format (comma) with VTT format (dot)
+  vtt += srt.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+  return vtt;
+}
 
 async function loadSubtitle(subUrl) {
   if (!subUrl) return null;
@@ -307,7 +313,7 @@ function loadDetail(sid) {
           dl.data.episodes.forEach(function(ep){
             var subUrl = ep.subtitle && ep.subtitle.url ? ep.subtitle.url : '';
             html+='<div class="episode-card"><div class="ep-info"><h4>Episode '+ep.ep+'</h4><p>'+(ep.title||'Season '+ep.se+' - Episode '+ep.ep)+' &bull; '+fmtSize(ep.size)+'</p></div><div class="ep-actions">'
-              +'<button class="btn-play-ep" onclick="playEpisode(\''+ep.resourceLink+'\',\''+esc(d.title)+' - Ep '+ep.ep+'\',\''+subUrl+'\')"><i class="fas fa-play"></i></button>'
+              +'<button class="btn-play-ep" onclick="playWithSub(\''+ep.resourceLink+'\',\''+esc(d.title)+' - Ep '+ep.ep+'\',\''+subUrl+'\')"><i class="fas fa-play"></i></button>'
               +'<a href="'+ep.resourceLink+'" target="_blank" class="btn-download-ep" download><i class="fas fa-download"></i></a></div></div>';
           });
         } else {
@@ -372,21 +378,123 @@ function playMovie(sid) {
   api(CONFIG.API_BASE+'/moviebox/download-movie?subjectId='+sid+'&resolution=360').then(function(dl){
     if(dl&&dl.data&&dl.data.files&&dl.data.files.length>0){
       var subUrl = dl.data.subtitle && dl.data.subtitle.url ? dl.data.subtitle.url : '';
-      playEpisode(dl.data.files[0].resourceLink, dl.data.title||'Movie', subUrl);
+      playWithSub(dl.data.files[0].resourceLink, dl.data.title||'Movie', subUrl);
     } else {
       toast('Tidak ada sumber video.');
     }
   });
 }
 
+function playWithSub(url, title, subUrl) {
+  // Load subtitle first, then open player
+  if (subUrl) {
+    loadSubtitle(subUrl).then(function(vttUrl) {
+      openPlayer(url, title, vttUrl);
+    });
+  } else {
+    openPlayer(url, title, null);
+  }
+}
 
-
-
+function downloadMovie(sid) {
+  api(CONFIG.API_BASE+'/moviebox/download-movie?subjectId='+sid+'&resolution=720').then(function(dl){
+    if(dl&&dl.data&&dl.data.files&&dl.data.files.length>0){
+      var best=dl.data.files.reduce(function(a,b){return a.resolution>b.resolution?a:b;});
+      window.open(best.resourceLink,'_blank');
+      toast('Download '+(dl.data.title||'')+' - '+best.resolution+'P');
+    } else {
+      toast('Link download tidak tersedia.');
+    }
+  });
+}
 
 // ===== VIDEO PLAYER WITH SUBTITLE SUPPORT =====
+function openPlayer(url, title, subBlobUrl) {
+  $('modalTitle').textContent = title || '';
 
+  var pl = $('playerLoading');
+  if(pl) { pl.style.display='flex'; pl.innerHTML='<div class="loader"></div><span>Memuat video...</span>'; }
 
+  var p = $('videoPlayer');
+  if(p) {
+    p.pause();
+    p.removeAttribute('src');
 
+    // Remove old tracks
+    var oldTracks = p.querySelectorAll('track');
+    oldTracks.forEach(function(t){ t.remove(); });
+
+    p.src = url;
+    p.load();
+  }
+
+  // Show subtitle button if available
+  var subBtn = $('subtitleBtn');
+  if(subBtn) {
+    if(subBlobUrl) {
+      subBtn.style.display = 'flex';
+      subBtn.dataset.subUrl = subBlobUrl || '';
+    } else {
+      subBtn.style.display = 'none';
+      subBtn.dataset.subUrl = '';
+    }
+  }
+
+  $('downloadBtnBottom').href = url;
+
+  document.body.style.overflow = 'hidden';
+  $('videoModal').classList.add('active');
+
+  if(p) {
+    p.oncanplay = function(){ if(pl) pl.style.display='none'; };
+    p.onplaying = function(){ if(pl) pl.style.display='none'; };
+    p.onerror = function(){ if(pl) pl.innerHTML='<span style="color:#e50914;font-size:0.9rem">Gagal. <a href="'+url+'" target="_blank" style="color:#fff">Download</a></span>'; };
+  }
+}
+
+function toggleSubtitle() {
+  var btn = $('subtitleBtn');
+  if(!btn) return;
+  var p = $('videoPlayer');
+  if(!p) return;
+
+  // Check if subtitle is already active
+  var tracks = p.textTracks;
+  if(tracks && tracks.length > 0) {
+    var track = tracks[0];
+    if(track.mode === 'showing') {
+      track.mode = 'hidden';
+      btn.classList.remove('active');
+      btn.innerHTML = '<i class="fas fa-closed-captioning"></i>';
+    } else {
+      track.mode = 'showing';
+      btn.classList.add('active');
+      btn.innerHTML = '<i class="fas fa-closed-captioning"></i> <span>IND</span>';
+    }
+    return;
+  }
+
+  // If no track, create one
+  var subUrl = btn.dataset.subUrl;
+  if(!subUrl) return;
+
+  var track = document.createElement('track');
+  track.kind = 'subtitles';
+  track.label = 'Indonesian';
+  track.srclang = 'id';
+  track.src = subUrl;
+  track.default = true;
+  p.appendChild(track);
+
+  // Wait for track to load then enable
+  track.addEventListener('load', function() {
+    if(tracks && tracks.length > 0) {
+      tracks[0].mode = 'showing';
+    }
+    btn.classList.add('active');
+    btn.innerHTML = '<i class="fas fa-closed-captioning"></i> <span>IND</span>';
+  });
+}
 
 function closeModal(e) {
   if(e && e.target !== $('videoModal')) return;
@@ -422,34 +530,6 @@ function searchMovies(query) {
 }
 
 function toggleMobileMenu() { $('navMenu').classList.toggle('active'); }
-
-
-// PLAY MOVIE (loads video + subtitle from API, then opens player via player.js)
-function playLoad(sid) {
-  api(CONFIG.API_BASE+'/moviebox/download-movie?subjectId='+sid+'&resolution=360').then(async function(dl){
-    if (!dl || !dl.data || !dl.data.files || dl.data.files.length === 0) {
-      toast('Tidak ada sumber video.');
-      return;
-    }
-    var videoUrl = dl.data.files[0].resourceLink;
-    var title = dl.data.title || 'Movie';
-    var subUrl = dl.data.subtitle && dl.data.subtitle.url ? dl.data.subtitle.url : null;
-    var vttUrl = subUrl ? await fetchSubtitle(subUrl) : null;
-    openPlayer(videoUrl, title, vttUrl);
-  });
-}
-
-function downloadMovie(sid) {
-  api(CONFIG.API_BASE+'/moviebox/download-movie?subjectId='+sid+'&resolution=720').then(function(dl){
-    if(dl&&dl.data&&dl.data.files&&dl.data.files.length>0){
-      var best=dl.data.files.reduce(function(a,b){return a.resolution>b.resolution?a:b;});
-      window.open(best.resourceLink,'_blank');
-      toast('Download '+(dl.data.title||'')+' - '+best.resolution+'P');
-    } else {
-      toast('Link download tidak tersedia.');
-    }
-  });
-}
 
 // INIT
 document.addEventListener('DOMContentLoaded', function(){
