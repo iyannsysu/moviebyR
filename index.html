@@ -116,27 +116,45 @@
         </div>
     </footer>
 
-    <!-- Modal Video Player -->
-    <div class="modal-overlay" id="videoModal" onclick="closeModal(event)">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modalTitle">Player</h3>
-                <button class="modal-close" onclick="closeModal()" aria-label="Tutup"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="modal-body" id="modalBody">
-                <div class="player-container">
-                    <video id="videoPlayer" controls autoplay playsinline webkit-playsinline x5-playsinline preload="auto">
-                        <p>Browser tidak mendukung video player.</p>
-                    </video>
-                </div>
-                <div class="player-download" id="playerDownload">
-                    <a id="downloadBtn" href="#" target="_blank" class="btn-download">
-                        <i class="fas fa-download"></i> Download Video
+    <!-- Video Player - Fullscreen Mobile Optimized -->
+    <div class="player-overlay" id="videoModal" onclick="closeModal(event)">
+        <div class="player-wrap">
+            <div class="player-topbar">
+                <span class="player-title" id="modalTitle">Player</span>
+                <div class="player-top-actions">
+                    <a id="downloadBtn" href="#" target="_blank" class="player-dl-btn" title="Download">
+                        <i class="fas fa-download"></i>
                     </a>
+                    <button class="player-close" onclick="closeModal()" aria-label="Tutup">
+                        <i class="fas fa-times"></i>
+                    </button>
                 </div>
+            </div>
+            <div class="player-stage" id="playerStage">
+                <video id="videoPlayer" 
+                       controls 
+                       playsinline 
+                       webkit-playsinline 
+                       x5-playsinline 
+                       x5-video-player-type="h5"
+                       x5-video-player-fullscreen="true"
+                       preload="metadata"
+                       poster="">
+                    <p>Browser tidak mendukung video player.</p>
+                </video>
+                <div class="player-loading" id="playerLoading">
+                    <div class="loader"></div>
+                    <span>Memuat video...</span>
+                </div>
+            </div>
+            <div class="player-bottom">
+                <a id="downloadBtnBottom" href="#" target="_blank" class="btn-download">
+                    <i class="fas fa-download"></i> Download Video
+                </a>
             </div>
         </div>
     </div>
+
 
     <script src="js/config.js"></script>
     <script src="js/app.js"></script>
