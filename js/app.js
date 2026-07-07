@@ -37,6 +37,29 @@ function imgUrl(o) {
   return PH;
 }
 
+// ===== SRT to VTT Converter =====
+function srt2vtt(srt) {
+  // Add WEBVTT header
+  var vtt = 'WEBVTT\n\n';
+  // Replace SRT timing format (comma) with VTT format (dot)
+  vtt += srt.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+  return vtt;
+}
+
+async function loadSubtitle(subUrl) {
+  if (!subUrl) return null;
+  try {
+    var res = await fetch(subUrl);
+    if (!res.ok) return null;
+    var text = await res.text();
+    var vtt = srt2vtt(text);
+    var blob = new Blob([vtt], { type: 'text/vtt' });
+    return URL.createObjectURL(blob);
+  } catch(e) {
+    return null;
+  }
+}
+
 // NAVIGATION
 function navigate(page, params) {
   params = params || {};
@@ -288,7 +311,10 @@ function loadDetail(sid) {
       api(CONFIG.API_BASE+'/moviebox/download-series?subjectId='+sid+'&season=1&resolution=360').then(function(dl){
         if(dl&&dl.data&&dl.data.episodes){
           dl.data.episodes.forEach(function(ep){
-            html+='<div class="episode-card"><div class="ep-info"><h4>Episode '+ep.ep+'</h4><p>'+(ep.title||'Season '+ep.se+' - Episode '+ep.ep)+' &bull; '+fmtSize(ep.size)+'</p></div><div class="ep-actions"><button class="btn-play-ep" onclick="openPlayer(\''+ep.resourceLink+'\',\''+esc(d.title)+' - Ep '+ep.ep+'\')"><i class="fas fa-play"></i></button><a href="'+ep.resourceLink+'" target="_blank" class="btn-download-ep" download><i class="fas fa-download"></i></a></div></div>';
+            var subUrl = ep.subtitle && ep.subtitle.url ? ep.subtitle.url : '';
+            html+='<div class="episode-card"><div class="ep-info"><h4>Episode '+ep.ep+'</h4><p>'+(ep.title||'Season '+ep.se+' - Episode '+ep.ep)+' &bull; '+fmtSize(ep.size)+'</p></div><div class="ep-actions">'
+              +'<button class="btn-play-ep" onclick="playWithSub(\''+ep.resourceLink+'\',\''+esc(d.title)+' - Ep '+ep.ep+'\',\''+subUrl+'\')"><i class="fas fa-play"></i></button>'
+              +'<a href="'+ep.resourceLink+'" target="_blank" class="btn-download-ep" download><i class="fas fa-download"></i></a></div></div>';
           });
         } else {
           html+='<p style="color:var(--text-muted);grid-column:1/-1">Data episode tidak tersedia.</p>';
@@ -347,15 +373,27 @@ function selectRes(sid,res,btn){
   });
 }
 
-// PLAY / DOWNLOAD
+// PLAY / DOWNLOAD (with subtitle support)
 function playMovie(sid) {
   api(CONFIG.API_BASE+'/moviebox/download-movie?subjectId='+sid+'&resolution=360').then(function(dl){
     if(dl&&dl.data&&dl.data.files&&dl.data.files.length>0){
-      openPlayer(dl.data.files[0].resourceLink, dl.data.title||'Movie');
+      var subUrl = dl.data.subtitle && dl.data.subtitle.url ? dl.data.subtitle.url : '';
+      playWithSub(dl.data.files[0].resourceLink, dl.data.title||'Movie', subUrl);
     } else {
       toast('Tidak ada sumber video.');
     }
   });
+}
+
+function playWithSub(url, title, subUrl) {
+  // Load subtitle first, then open player
+  if (subUrl) {
+    loadSubtitle(subUrl).then(function(vttUrl) {
+      openPlayer(url, title, vttUrl);
+    });
+  } else {
+    openPlayer(url, title, null);
+  }
 }
 
 function downloadMovie(sid) {
@@ -370,8 +408,8 @@ function downloadMovie(sid) {
   });
 }
 
-// ===== VIDEO PLAYER - SIMPLE FULLSCREEN =====
-function openPlayer(url, title) {
+// ===== VIDEO PLAYER WITH SUBTITLE SUPPORT =====
+function openPlayer(url, title, subBlobUrl) {
   $('modalTitle').textContent = title || '';
 
   var pl = $('playerLoading');
@@ -381,8 +419,25 @@ function openPlayer(url, title) {
   if(p) {
     p.pause();
     p.removeAttribute('src');
+
+    // Remove old tracks
+    var oldTracks = p.querySelectorAll('track');
+    oldTracks.forEach(function(t){ t.remove(); });
+
     p.src = url;
     p.load();
+  }
+
+  // Show subtitle button if available
+  var subBtn = $('subtitleBtn');
+  if(subBtn) {
+    if(subBlobUrl) {
+      subBtn.style.display = 'flex';
+      subBtn.dataset.subUrl = subBlobUrl || '';
+    } else {
+      subBtn.style.display = 'none';
+      subBtn.dataset.subUrl = '';
+    }
   }
 
   $('downloadBtnBottom').href = url;
@@ -395,6 +450,50 @@ function openPlayer(url, title) {
     p.onplaying = function(){ if(pl) pl.style.display='none'; };
     p.onerror = function(){ if(pl) pl.innerHTML='<span style="color:#e50914;font-size:0.9rem">Gagal. <a href="'+url+'" target="_blank" style="color:#fff">Download</a></span>'; };
   }
+}
+
+function toggleSubtitle() {
+  var btn = $('subtitleBtn');
+  if(!btn) return;
+  var p = $('videoPlayer');
+  if(!p) return;
+
+  // Check if subtitle is already active
+  var tracks = p.textTracks;
+  if(tracks && tracks.length > 0) {
+    var track = tracks[0];
+    if(track.mode === 'showing') {
+      track.mode = 'hidden';
+      btn.classList.remove('active');
+      btn.innerHTML = '<i class="fas fa-closed-captioning"></i>';
+    } else {
+      track.mode = 'showing';
+      btn.classList.add('active');
+      btn.innerHTML = '<i class="fas fa-closed-captioning"></i> <span>IND</span>';
+    }
+    return;
+  }
+
+  // If no track, create one
+  var subUrl = btn.dataset.subUrl;
+  if(!subUrl) return;
+
+  var track = document.createElement('track');
+  track.kind = 'subtitles';
+  track.label = 'Indonesian';
+  track.srclang = 'id';
+  track.src = subUrl;
+  track.default = true;
+  p.appendChild(track);
+
+  // Wait for track to load then enable
+  track.addEventListener('load', function() {
+    if(tracks && tracks.length > 0) {
+      tracks[0].mode = 'showing';
+    }
+    btn.classList.add('active');
+    btn.innerHTML = '<i class="fas fa-closed-captioning"></i> <span>IND</span>';
+  });
 }
 
 function closeModal(e) {
@@ -434,7 +533,7 @@ function toggleMobileMenu() { $('navMenu').classList.toggle('active'); }
 
 // INIT
 document.addEventListener('DOMContentLoaded', function(){
-  console.log('Movie Free by R v3');
+  console.log('Movie Free by R v3 - Sub Indo');
   navigate('home');
   window.addEventListener('resize',function(){if(window.innerWidth>768)$('navMenu').classList.remove('active');});
   document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal();});
