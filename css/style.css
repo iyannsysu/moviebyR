@@ -179,6 +179,15 @@ body {
     padding: 8px 16px; background: #000; min-height: 44px; flex-shrink: 0;
 }
 .player-title { color: #fff; font-size: 0.85rem; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.player-top-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.player-sub-btn {
+    background: none; border: 1px solid rgba(255,255,255,0.3); color: rgba(255,255,255,0.7);
+    font-size: 1rem; cursor: pointer; padding: 4px 10px; border-radius: 4px;
+    display: flex; align-items: center; gap: 4px; transition: all 0.2s;
+}
+.player-sub-btn:hover { border-color: #fff; color: #fff; }
+.player-sub-btn.active { background: #e50914; border-color: #e50914; color: #fff; }
+.player-sub-btn span { font-size: 0.7rem; font-weight: 700; }
 .player-close { background: none; border: none; color: #fff; font-size: 1.3rem; cursor: pointer; padding: 4px 10px; }
 
 .player-stage {
