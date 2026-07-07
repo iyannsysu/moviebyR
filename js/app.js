@@ -1,10 +1,10 @@
 // ==========================================
-// Movie Free by R - Main Application
+// Movie Free by R v2.0 - Main Application
 // ==========================================
 
 let currentPage = 'home';
 let currentData = null;
-let currentParams = { page: 1, query: '', category: '' };
+let currentParams = { page: 1 };
 let heroInterval = null;
 let currentSlide = 0;
 
@@ -12,615 +12,544 @@ let currentSlide = 0;
 // DOM HELPERS
 // ==========================================
 
-const $ = (id) => document.getElementById(id);
-const qs = (sel) => document.querySelector(sel);
-const qsa = (sel) => document.querySelectorAll(sel);
+const $ = id => document.getElementById(id);
+const qs = sel => document.querySelector(sel);
+const qsa = sel => document.querySelectorAll(sel);
 
-function formatDuration(seconds) {
-    if (!seconds || seconds === 0) return '';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    return h > 0 ? `${h}j ${m}m` : `${m}m`;
+function escAttr(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function formatDate(dateStr) {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' });
+function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function formatSize(bytes) {
-    if (!bytes) return '';
-    const mb = parseInt(bytes) / (1024 * 1024);
+function formatDate(d) {
+    if (!d) return '';
+    try { return new Date(d).toLocaleDateString('id-ID', { year: 'numeric', month: 'long', day: 'numeric' }); }
+    catch (e) { return d; }
+}
+
+function formatSize(b) {
+    if (!b) return '';
+    const mb = parseInt(b) / (1024 * 1024);
     return mb > 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb.toFixed(0) + ' MB';
 }
 
-function getTypeBadge(type) {
-    return type === 2
-        ? '<span class="type-badge series-badge">Series</span>'
-        : '<span class="type-badge">Movie</span>';
-}
+function getImdb(s) { return s.imdbRatingValue || s.imdbRate || ''; }
+
+const PLACEHOLDER = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 300 450%22%3E%3Crect fill=%22%231a1a2e%22 width=%22300%22 height=%22450%22/%3E%3Ctext x=%22150%22 y=%22225%22 text-anchor=%22middle%22 fill=%22%23666%22 font-size=%2218%22 font-family=%22sans-serif%22%3ENo Image%3C/text%3E%3C/svg%3E';
 
 function showLoader() {
-    $('loader').style.display = 'flex';
-    $('pageContent').innerHTML = '';
+    const l = $('loader');
+    if (l) l.style.display = 'flex';
+    const pc = $('pageContent');
+    if (pc) pc.innerHTML = '';
 }
 
 function hideLoader() {
-    $('loader').style.display = 'none';
+    const l = $('loader');
+    if (l) l.style.display = 'none';
 }
 
-function showToast(msg) {
-    const toast = document.createElement('div');
-    toast.style.cssText =
-        'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);background:#e50914;color:white;padding:12px 24px;border-radius:8px;z-index:9999;font-weight:600;box-shadow:0 8px 25px rgba(0,0,0,0.3);animation:fadeIn 0.3s ease;';
-    toast.textContent = msg;
-    document.body.appendChild(toast);
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        toast.style.transition = 'opacity 0.3s';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
+function toast(msg) {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#e50914;color:#fff;padding:12px 24px;border-radius:8px;z-index:9999;font-weight:600;box-shadow:0 4px 20px rgba(0,0,0,0.5);font-size:14px;max-width:90vw;text-align:center;';
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 400); }, 3000);
+}
+
+// ==========================================
+// API FETCH
+// ==========================================
+
+async function api(url) {
+    try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+    } catch (e) {
+        console.error('API Error [' + url.split('?')[0].split('/').pop() + ']: ' + e.message);
+        return null;
+    }
+}
+
+function imgUrl(obj) {
+    if (!obj) return PLACEHOLDER;
+    if (typeof obj === 'string') return obj || PLACEHOLDER;
+    if (obj && obj.url) return obj.url;
+    return PLACEHOLDER;
 }
 
 // ==========================================
 // NAVIGATION
 // ==========================================
 
-function navigate(page, params = {}) {
-    if (heroInterval) clearInterval(heroInterval);
+function navigate(page, params) {
+    params = params || {};
+    if (heroInterval) { clearInterval(heroInterval); heroInterval = null; }
     currentPage = page;
-    currentParams = { ...currentParams, ...params, page: params.page || 1 };
+    currentParams = Object.assign({}, currentParams, params, { page: params.page || 1 });
 
-    qsa('.nav-link').forEach((l) => l.classList.remove('active'));
-    const navMap = {
-        home: 'home', global: 'global', indonesia: 'indonesia',
-        hollywood: 'hollywood', asia: 'asia', horror: 'horror',
-        animasi: 'animasi', series: 'series',
-        'series-kdrama': 'series', 'series-indo': 'series',
-        'series-anime': 'series', 'series-barat': 'series',
-        'series-cdrama': 'series', 'series-thai': 'series',
-        'series-reality': 'series',
-    };
-    const navPage = navMap[page] || 'home';
-    const activeLink = qs(`.nav-link[data-page="${navPage}"]`);
-    if (activeLink) activeLink.classList.add('active');
+    qsa('.nav-link').forEach(function(l) { l.classList.remove('active'); });
+    var map = { home:'home', global:'global', indonesia:'indonesia', hollywood:'hollywood', asia:'asia', horror:'horror', animasi:'animasi', series:'series', 'series-kdrama':'series', 'series-indo':'series', 'series-anime':'series', 'series-barat':'series', 'series-cdrama':'series', 'series-thai':'series' };
+    var el = qs('.nav-link[data-page="' + (map[page] || 'home') + '"]');
+    if (el) el.classList.add('active');
+    if ($('navMenu')) $('navMenu').classList.remove('active');
 
-    $('navMenu').classList.remove('active');
     showLoader();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 
-    const handlers = {
-        home: loadHome,
-        global: () => loadRanking('global'),
-        indonesia: () => loadRanking('indonesia'),
-        hollywood: () => loadRanking('hollywood'),
-        asia: () => loadRanking('asia'),
-        horror: () => loadRanking('horror'),
-        animasi: () => loadRanking('animasi'),
-        detail: () => loadDetail(params.subjectId),
-        search: () => searchMovies(params.query),
-        series: () => loadSeries('kdrama'),
-        'series-kdrama': () => loadSeries('kdrama'),
-        'series-indo': () => loadSeries('indo'),
-        'series-anime': () => loadSeries('anime'),
-        'series-barat': () => loadSeries('barat'),
-        'series-cdrama': () => loadSeries('cdrama'),
-        'series-thai': () => loadSeries('thai'),
-        'series-reality': () => loadSeries('reality'),
+    var handlers = {
+        home: function() { loadHome(); },
+        global: function() { loadList('global'); },
+        indonesia: function() { loadList('indonesia'); },
+        hollywood: function() { loadList('hollywood'); },
+        asia: function() { loadList('asia'); },
+        horror: function() { loadList('horror'); },
+        animasi: function() { loadList('animasi'); },
+        detail: function() { loadDetail(params.subjectId); },
+        search: function() { searchMovies(params.query); },
+        series: function() { loadSeries('kdrama'); },
+        'series-kdrama': function() { loadSeries('kdrama'); },
+        'series-indo': function() { loadSeries('indo'); },
+        'series-anime': function() { loadSeries('anime'); },
+        'series-barat': function() { loadSeries('barat'); },
+        'series-cdrama': function() { loadSeries('cdrama'); },
+        'series-thai': function() { loadSeries('thai'); }
     };
+    (handlers[page] || loadHome)();
+}
 
-    const handler = handlers[page] || loadHome;
-    handler();
+function changePage(np) {
+    currentParams.page = np;
+    navigate(currentPage, { page: np });
 }
 
 // ==========================================
-// HOME PAGE
+// RENDER CARD
 // ==========================================
 
-async function loadHome() {
-    try {
-        const [homeRes, globalRes, indoRes, holRes, kdramaRes] = await Promise.all([
-            fetch(`${CONFIG.API_BASE}/moviebox/homepage`),
-            fetch(`${CONFIG.API_BASE}/moviebox/global?page=1&perPage=${CONFIG.PER_PAGE}`),
-            fetch(`${CONFIG.API_BASE}/moviebox/indonesia?page=1&perPage=10`),
-            fetch(`${CONFIG.API_BASE}/moviebox/hollywood?page=1&perPage=10`),
-            fetch(`${CONFIG.API_BASE}/moviebox/series/kdrama?page=1&perPage=10`),
-        ]);
-
-        const homeData = await homeRes.json();
-        const globalData = await globalRes.json();
-        const indoData = await indoRes.json();
-        const holData = await holRes.json();
-        const kdramaData = await kdramaRes.json();
-
-        hideLoader();
-        let html = '';
-
-        // ─── Hero Banner ───
-        const banners = [];
-        if (homeData.data && homeData.data.items) {
-            homeData.data.items.forEach((item) => {
-                if (item.banner && item.banner.banners) {
-                    item.banner.banners.forEach((b) => {
-                        if (b.subject) banners.push(b);
-                    });
-                }
-            });
-        }
-
-        if (banners.length > 0) {
-            html += `<section class="hero-section"><div class="hero-carousel" id="heroCarousel">`;
-            banners.slice(0, CONFIG.HERO_BANNER_COUNT).forEach((b, i) => {
-                const sub = b.subject;
-                const genres = sub.genre
-                    ? sub.genre.split(',').map((g) => g.trim()).slice(0, 3)
-                    : [];
-                html += `
-                <div class="hero-slide ${i === 0 ? 'active' : ''}" data-index="${i}">
-                    <div class="hero-slide-bg" style="background-image:url('${sub.cover?.url || ''}')"></div>
-                    <div class="hero-slide-content">
-                        <h2>${escHtml(sub.title)}</h2>
-                        <div class="hero-meta">
-                            <span><i class="fas fa-calendar"></i> ${sub.releaseDate || ''}</span>
-                            <span><i class="fas fa-star" style="color:var(--accent)"></i> ${sub.imdbRatingValue || sub.imdbRate || ''}</span>
-                        </div>
-                        <div class="hero-genre">${genres.map((g) => `<span>${escHtml(g)}</span>`).join('')}</div>
-                        <div class="hero-actions">
-                            <button class="btn-primary" onclick="navigate('detail', {subjectId:'${sub.subjectId}'})">
-                                <i class="fas fa-info-circle"></i> Detail
-                            </button>
-                            <button class="btn-secondary" onclick="playMovie('${sub.subjectId}', '${escHtml(sub.title)}')">
-                                <i class="fas fa-play"></i> Tonton
-                            </button>
-                        </div>
-                    </div>
-                </div>`;
-            });
-            html += `<div class="hero-dots">`;
-            banners.slice(0, CONFIG.HERO_BANNER_COUNT).forEach((_, i) => {
-                html += `<button class="hero-dot ${i === 0 ? 'active' : ''}" data-slide="${i}" onclick="gotoHeroSlide(${i})"></button>`;
-            });
-            html += `</div></div></section>`;
-        }
-
-        // ─── Category Icons ───
-        html += `<section class="container"><div class="categories-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:15px;margin-bottom:40px;">`;
-        const cats = [
-            { name: 'Global', icon: 'fa-globe', page: 'global', color: '#4361ee' },
-            { name: 'Indonesia', icon: 'fa-flag', page: 'indonesia', color: '#e50914' },
-            { name: 'Hollywood', icon: 'fa-film', page: 'hollywood', color: '#f5c518' },
-            { name: 'Asia', icon: 'fa-earth-asia', page: 'asia', color: '#06d6a0' },
-            { name: 'Horror', icon: 'fa-ghost', page: 'horror', color: '#7209b7' },
-            { name: 'Animasi', icon: 'fa-dragon', page: 'animasi', color: '#fb5607' },
-            { name: 'K-Drama', icon: 'fa-tv', page: 'series-kdrama', color: '#e63946' },
-            { name: 'Anime', icon: 'fa-crown', page: 'series-anime', color: '#f72585' },
-            { name: 'C-Drama', icon: 'fa-bolt', page: 'series-cdrama', color: '#4cc9f0' },
-            { name: 'Barat', icon: 'fa-globe-americas', page: 'series-barat', color: '#2ec4b6' },
-        ];
-        cats.forEach((c) => {
-            html += `<a href="#" onclick="navigate('${c.page}')" 
-                style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:25px 15px;background:var(--bg-card);border-radius:var(--radius);text-decoration:none;color:var(--text-primary);transition:var(--transition);border:1px solid rgba(255,255,255,0.05);"
-                onmouseover="this.style.borderColor='${c.color}';this.style.transform='translateY(-5px)'"
-                onmouseout="this.style.borderColor='transparent';this.style.transform='none'">
-                <i class="fas ${c.icon}" style="font-size:2rem;color:${c.color};margin-bottom:10px;"></i>
-                <span style="font-weight:600;font-size:0.9rem;">${c.name}</span>
-            </a>`;
-        });
-        html += `</div></section>`;
-
-        // ─── Rows ───
-        if (globalData.data && globalData.data.subjects) {
-            html += renderSection('🌍', 'Global', globalData.data.subjects.slice(0, 10), 'global');
-        }
-        if (indoData.data && indoData.data.subjects) {
-            html += renderSection('🇮🇩', 'Indonesia', indoData.data.subjects.slice(0, 10), 'indonesia');
-        }
-        if (holData.data && holData.data.subjects) {
-            html += renderSection('🇺🇸', 'Hollywood', holData.data.subjects.slice(0, 10), 'hollywood');
-        }
-        if (kdramaData.data && kdramaData.data.subjects) {
-            html += renderSection('📺', 'K-Drama Series', kdramaData.data.subjects.slice(0, 10), 'series-kdrama');
-        }
-
-        $('pageContent').innerHTML = html;
-        startHeroAutoplay();
-    } catch (err) {
-        console.error('Home load error:', err);
-        hideLoader();
-        $('pageContent').innerHTML = `<div class="container empty-state"><i class="fas fa-exclamation-triangle" style="color:var(--primary)"></i><p>Gagal memuat data. Coba refresh halaman.</p><p style="font-size:0.8rem;color:var(--text-muted)">${err.message}</p></div>`;
-    }
-}
-
-function renderSection(icon, title, subjects, page) {
-    let html = `<section class="container" style="margin-bottom:40px;">
-        <div class="section-header">
-            <h2><span class="section-icon">${icon}</span> ${title}</h2>
-            <button class="view-all" onclick="navigate('${page}')">Lihat Semua <i class="fas fa-arrow-right"></i></button>
-        </div>
-        <div class="movie-grid">`;
-    subjects.forEach((s) => { html += renderMovieCard(s); });
-    html += `</div></section>`;
-    return html;
+function cardClick(sid) {
+    navigate('detail', { subjectId: sid });
 }
 
 function renderMovieCard(s) {
-    const img = s.cover?.url || 'https://via.placeholder.com/300x450/1a1a2e/666?text=No+Image';
-    return `
-    <div class="movie-card" onclick="navigate('detail', {subjectId:'${s.subjectId}')">
-        <div class="movie-card-poster">
-            <img src="${img}" alt="${escHtml(s.title)}" loading="lazy"
-                 onerror="this.src='https://via.placeholder.com/300x450/1a1a2e/666?text=No+Image'">
-            <div class="movie-card-overlay">
-                <div class="play-btn-small"><i class="fas fa-play"></i></div>
-            </div>
-        </div>
-        <div class="movie-card-info">
-            <h3 title="${escHtml(s.title)}">${escHtml(s.title)}</h3>
-            <div class="card-meta">
-                ${s.imdbRate || s.imdbRatingValue ? `<span class="imdb"><i class="fas fa-star"></i> ${s.imdbRate || s.imdbRatingValue}</span>` : ''}
-                ${s.releaseDate ? `<span>${(s.releaseDate + '').substring(0, 4)}</span>` : ''}
-                ${getTypeBadge(s.subjectType)}
-            </div>
-        </div>
-    </div>`;
+    if (!s || !s.subjectId) return '';
+    var img = imgUrl(s.cover);
+    var title = escHtml(s.title || 'Untitled');
+    var imdb = getImdb(s);
+    var year = s.releaseDate ? String(s.releaseDate).substring(0, 4) : '';
+    var isSeries = s.subjectType === 2;
+    var sid = s.subjectId;
+
+    return '<div class="movie-card" onclick="cardClick(\'' + sid + '\')">' +
+        '<div class="movie-card-poster">' +
+            '<img src="' + img + '" alt="' + title + '" loading="lazy" onerror="this.src=\'' + PLACEHOLDER + '\'">' +
+            '<div class="movie-card-overlay"><div class="play-btn-small"><i class="fas fa-play"></i></div></div>' +
+        '</div>' +
+        '<div class="movie-card-info">' +
+            '<h3 title="' + title + '">' + title + '</h3>' +
+            '<div class="card-meta">' +
+                (imdb ? '<span class="imdb"><i class="fas fa-star"></i> ' + imdb + '</span>' : '') +
+                (year ? '<span>' + year + '</span>' : '') +
+                '<span class="type-badge ' + (isSeries ? 'series-badge' : '') + '">' + (isSeries ? 'Series' : 'Movie') + '</span>' +
+            '</div>' +
+        '</div>' +
+    '</div>';
 }
 
-function escHtml(str) {
-    if (!str) return '';
-    return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+function renderGrid(subjects) {
+    if (!subjects || subjects.length === 0) return '<div class="empty-state"><i class="fas fa-film"></i><p>Tidak ada data.</p></div>';
+    return '<div class="movie-grid">' + subjects.map(renderMovieCard).join('') + '</div>';
+}
+
+function renderSection(icon, title, subjects, page) {
+    if (!subjects || subjects.length === 0) return '';
+    return '<section class="container" style="margin-bottom:40px">' +
+        '<div class="section-header">' +
+            '<h2><span class="section-icon">' + icon + '</span> ' + title + '</h2>' +
+            '<button class="view-all" onclick="navigate(\'' + page + '\')">Lihat Semua <i class="fas fa-arrow-right"></i></button>' +
+        '</div>' +
+        renderGrid(subjects) +
+    '</section>';
+}
+
+function renderPagination() {
+    var p = currentParams.page;
+    return '<div class="pagination">' +
+        '<button ' + (p <= 1 ? 'disabled' : '') + ' onclick="changePage(' + (p - 1) + ')"><i class="fas fa-chevron-left"></i> Sebelumnya</button>' +
+        '<span>Halaman ' + p + '</span>' +
+        '<button onclick="changePage(' + (p + 1) + ')">Selanjutnya <i class="fas fa-chevron-right"></i></button>' +
+    '</div>';
 }
 
 // ==========================================
-// HERO CAROUSEL
+// HOME
 // ==========================================
 
-function gotoHeroSlide(index) {
-    currentSlide = index;
-    qsa('.hero-slide').forEach((s, i) => s.classList.toggle('active', i === index));
-    qsa('.hero-dot').forEach((d, i) => d.classList.toggle('active', i === index));
+function loadHome() {
+    var urls = [
+        CONFIG.API_BASE + '/moviebox/homepage',
+        CONFIG.API_BASE + '/moviebox/global?page=1&perPage=' + CONFIG.PER_PAGE,
+        CONFIG.API_BASE + '/moviebox/indonesia?page=1&perPage=10',
+        CONFIG.API_BASE + '/moviebox/hollywood?page=1&perPage=10',
+        CONFIG.API_BASE + '/moviebox/series/kdrama?page=1&perPage=10'
+    ];
+
+    Promise.all(urls.map(api)).then(function(results) {
+        var home = results[0], global = results[1], indo = results[2], hol = results[3], kdrama = results[4];
+        hideLoader();
+
+        var html = '';
+
+        // HERO BANNER
+        if (home && home.data && home.data.items) {
+            var banners = [];
+            home.data.items.forEach(function(item) {
+                if (item.banner && item.banner.banners) {
+                    item.banner.banners.forEach(function(b) { if (b.subject) banners.push(b); });
+                }
+            });
+            if (banners.length > 0) {
+                html += '<section class="hero-section"><div class="hero-carousel" id="heroCarousel">';
+                banners.slice(0, 6).forEach(function(b, i) {
+                    var sub = b.subject;
+                    var g = sub.genre ? sub.genre.split(',').map(function(x) { return x.trim(); }).slice(0, 3) : [];
+                    var bg = imgUrl(sub.cover);
+                    var imdb = getImdb(sub);
+                    var sid = sub.subjectId;
+                    html += '<div class="hero-slide' + (i === 0 ? ' active' : '') + '">' +
+                        '<div class="hero-slide-bg" style="background-image:url(\'' + bg + '\')"></div>' +
+                        '<div class="hero-slide-content">' +
+                            '<h2>' + escHtml(sub.title) + '</h2>' +
+                            '<div class="hero-meta">' +
+                                (sub.releaseDate ? '<span><i class="fas fa-calendar"></i> ' + sub.releaseDate + '</span>' : '') +
+                                (imdb ? '<span><i class="fas fa-star" style="color:var(--accent)"></i> ' + imdb + '</span>' : '') +
+                            '</div>' +
+                            '<div class="hero-genre">' + g.map(function(x) { return '<span>' + escHtml(x) + '</span>'; }).join('') + '</div>' +
+                            '<div class="hero-actions">' +
+                                '<button class="btn-primary" onclick="navigate(\'detail\',{subjectId:\'' + sid + '\'})"><i class="fas fa-info-circle"></i> Detail</button>' +
+                                '<button class="btn-secondary" onclick="playMovie(\'' + sid + '\')"><i class="fas fa-play"></i> Tonton</button>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+                });
+                html += '<div class="hero-dots">';
+                banners.slice(0, 6).forEach(function(_, i) {
+                    html += '<button class="hero-dot' + (i === 0 ? ' active' : '') + '" onclick="gotoHeroSlide(' + i + ')"></button>';
+                });
+                html += '</div></div></section>';
+            }
+        }
+
+        // CATEGORY ICONS
+        html += '<section class="container"><div class="categories-grid">';
+        var cats = [
+            { n:'Global', i:'fa-globe', p:'global', c:'#4361ee' },
+            { n:'Indonesia', i:'fa-flag', p:'indonesia', c:'#e50914' },
+            { n:'Hollywood', i:'fa-film', p:'hollywood', c:'#f5c518' },
+            { n:'Asia', i:'fa-earth-asia', p:'asia', c:'#06d6a0' },
+            { n:'Horror', i:'fa-ghost', p:'horror', c:'#7209b7' },
+            { n:'Animasi', i:'fa-dragon', p:'animasi', c:'#fb5607' },
+            { n:'K-Drama', i:'fa-tv', p:'series-kdrama', c:'#e63946' },
+            { n:'Anime', i:'fa-crown', p:'series-anime', c:'#f72585' },
+            { n:'C-Drama', i:'fa-bolt', p:'series-cdrama', c:'#4cc9f0' },
+            { n:'Barat', i:'fa-globe-americas', p:'series-barat', c:'#2ec4b6' }
+        ];
+        cats.forEach(function(c) {
+            html += '<a href="#" onclick="navigate(\'' + c.p + '\')" class="cat-item" style="--cat-color:' + c.c + '">' +
+                '<i class="fas ' + c.i + '"></i><span>' + c.n + '</span></a>';
+        });
+        html += '</div></section>';
+
+        // CONTENT ROWS
+        var sections = [
+            { icon:'🌍', title:'Global', data:global, page:'global' },
+            { icon:'🇮🇩', title:'Indonesia', data:indo, page:'indonesia' },
+            { icon:'🇺🇸', title:'Hollywood', data:hol, page:'hollywood' },
+            { icon:'📺', title:'K-Drama', data:kdrama, page:'series-kdrama' }
+        ];
+        sections.forEach(function(s) {
+            var subs = s.data && s.data.data && s.data.data.subjects ? s.data.data.subjects.slice(0, 10) : null;
+            if (subs) html += renderSection(s.icon, s.title, subs, s.page);
+        });
+
+        var pc = $('pageContent');
+        if (pc) pc.innerHTML = html || '<div class="container empty-state"><i class="fas fa-frown"></i><p>Tidak ada data.</p></div>';
+        startHeroAutoplay();
+    }).catch(function(err) {
+        console.error('Home:', err);
+        hideLoader();
+        var pc = $('pageContent');
+        if (pc) pc.innerHTML = '<div class="container empty-state"><i class="fas fa-exclamation-triangle" style="color:var(--primary)"></i><p>Gagal memuat data.</p><button class="btn-primary" style="margin-top:15px" onclick="navigate(\'home\')"><i class="fas fa-redo"></i> Coba Lagi</button></div>';
+    });
+}
+
+// ==========================================
+// HERO
+// ==========================================
+
+function gotoHeroSlide(i) {
+    currentSlide = i;
+    qsa('.hero-slide').forEach(function(s, idx) { s.classList.toggle('active', idx === i); });
+    qsa('.hero-dot').forEach(function(d, idx) { d.classList.toggle('active', idx === i); });
 }
 
 function startHeroAutoplay() {
-    const slides = qsa('.hero-slide');
+    var slides = qsa('.hero-slide');
     if (slides.length < 2) return;
     if (heroInterval) clearInterval(heroInterval);
-    heroInterval = setInterval(() => {
-        gotoHeroSlide((currentSlide + 1) % slides.length);
-    }, 5000);
+    heroInterval = setInterval(function() { gotoHeroSlide((currentSlide + 1) % slides.length); }, 5000);
 }
 
 // ==========================================
-// RANKING PAGES
+// LIST PAGES
 // ==========================================
 
-async function loadRanking(type) {
-    try {
-        const url = `${CONFIG.API_BASE}/moviebox/${type}?page=${currentParams.page}&perPage=${CONFIG.PER_PAGE}`;
-        const res = await fetch(url);
-        const data = await res.json();
+function loadList(type) {
+    api(CONFIG.API_BASE + '/moviebox/' + type + '?page=' + currentParams.page + '&perPage=' + CONFIG.PER_PAGE).then(function(data) {
+        hideLoader();
         currentData = data;
+        var titles = { global:'Global', indonesia:'Indonesia', hollywood:'Hollywood', asia:'Asia', horror:'Horror', animasi:'Animasi' };
+        var subs = data && data.data && data.data.subjects ? data.data.subjects : [];
+        var pc = $('pageContent');
+        if (pc) pc.innerHTML = '<div class="container" style="padding-top:30px">' +
+            '<div class="section-header"><h2>' + (titles[type] || type) + '</h2></div>' +
+            (subs.length > 0 ? renderGrid(subs) + renderPagination() : '<div class="empty-state"><i class="fas fa-film"></i><p>Tidak ada data.</p></div>') +
+        '</div>';
+    }).catch(function() {
         hideLoader();
-
-        const titleMap = {
-            global: '🌍 Global',
-            indonesia: '🇮🇩 Indonesia',
-            hollywood: '🇺🇸 Hollywood',
-            asia: '🌏 Asia',
-            horror: '👻 Horror',
-            animasi: '🐉 Animasi',
-        };
-
-        let html = `<div class="container" style="padding-top:30px;">
-            <div class="section-header"><h2>${titleMap[type] || type}</h2></div>`;
-
-        if (data.data && data.data.subjects && data.data.subjects.length > 0) {
-            html += `<div class="movie-grid">`;
-            data.data.subjects.forEach((s) => { html += renderMovieCard(s); });
-            html += `</div>${renderPagination()}`;
-        } else {
-            html += `<div class="empty-state"><i class="fas fa-film"></i><p>Tidak ada data.</p></div>`;
-        }
-        html += `</div>`;
-        $('pageContent').innerHTML = html;
-    } catch (err) {
-        console.error('Ranking load error:', err);
-        hideLoader();
-        $('pageContent').innerHTML = `<div class="container empty-state"><i class="fas fa-exclamation-triangle" style="color:var(--primary)"></i><p>Gagal memuat data.</p></div>`;
-    }
+        var pc = $('pageContent');
+        if (pc) pc.innerHTML = '<div class="container empty-state"><i class="fas fa-exclamation-triangle" style="color:var(--primary)"></i><p>Gagal memuat data.</p></div>';
+    });
 }
 
 // ==========================================
 // SERIES PAGES
 // ==========================================
 
-async function loadSeries(type) {
-    try {
-        const url = `${CONFIG.API_BASE}/moviebox/series/${type}?page=${currentParams.page}&perPage=${CONFIG.PER_PAGE}`;
-        const res = await fetch(url);
-        const data = await res.json();
+function loadSeries(type) {
+    api(CONFIG.API_BASE + '/moviebox/series/' + type + '?page=' + currentParams.page + '&perPage=' + CONFIG.PER_PAGE).then(function(data) {
+        hideLoader();
         currentData = data;
+        var titles = { kdrama:'K-Drama', indo:'Indo Drama', anime:'Anime', barat:'Series Barat', cdrama:'C-Drama', thai:'Thai-Drama', reality:'Reality' };
+        var subs = data && data.data && data.data.subjects ? data.data.subjects : [];
+        var pc = $('pageContent');
+        if (pc) pc.innerHTML = '<div class="container" style="padding-top:30px">' +
+            '<div class="section-header"><h2>' + (titles[type] || 'Series') + '</h2></div>' +
+            (subs.length > 0 ? renderGrid(subs) + renderPagination() : '<div class="empty-state"><i class="fas fa-tv"></i><p>Tidak ada data.</p></div>') +
+        '</div>';
+    }).catch(function() {
         hideLoader();
-
-        const titleMap = {
-            kdrama: '📺 K-Drama', indo: '🇮🇩 Indo Drama', anime: '🇯🇵 Anime',
-            barat: '🌎 Series Barat', cdrama: '🇨🇳 C-Drama', thai: '🇹🇭 Thai-Drama',
-            reality: '🎯 Reality',
-        };
-
-        let html = `<div class="container" style="padding-top:30px;">
-            <div class="section-header"><h2>${titleMap[type] || 'Series'}</h2></div>`;
-
-        if (data.data && data.data.subjects && data.data.subjects.length > 0) {
-            html += `<div class="movie-grid">`;
-            data.data.subjects.forEach((s) => { html += renderMovieCard(s); });
-            html += `</div>${renderPagination()}`;
-        } else {
-            html += `<div class="empty-state"><i class="fas fa-tv"></i><p>Tidak ada data.</p></div>`;
-        }
-        html += `</div>`;
-        $('pageContent').innerHTML = html;
-    } catch (err) {
-        console.error('Series load error:', err);
-        hideLoader();
-        $('pageContent').innerHTML = `<div class="container empty-state"><i class="fas fa-exclamation-triangle" style="color:var(--primary)"></i><p>Gagal memuat data.</p></div>`;
-    }
+        var pc = $('pageContent');
+        if (pc) pc.innerHTML = '<div class="container empty-state"><i class="fas fa-exclamation-triangle" style="color:var(--primary)"></i><p>Gagal memuat data.</p></div>';
+    });
 }
 
 // ==========================================
-// DETAIL PAGE
+// DETAIL
 // ==========================================
 
-async function loadDetail(subjectId) {
-    try {
-        const res = await fetch(`${CONFIG.API_BASE}/moviebox/detail?subjectId=${subjectId}`);
-        const data = await res.json();
-        if (data.code !== 0 || !data.data) throw new Error('Data tidak ditemukan');
-
-        const d = data.data;
-        const isSeries = d.subjectType === 2;
-        const genres = d.genre ? d.genre.split(',').map((g) => g.trim()) : [];
-        const cast = d.staffList ? d.staffList.filter((s) => s.staffType === 1) : [];
+function loadDetail(subjectId) {
+    api(CONFIG.API_BASE + '/moviebox/detail?subjectId=' + subjectId).then(function(data) {
         hideLoader();
+        if (!data || !data.data) {
+            var pc = $('pageContent');
+            if (pc) pc.innerHTML = '<div class="container empty-state" style="padding-top:50px"><i class="fas fa-exclamation-triangle" style="color:var(--primary)"></i><p>Detail tidak ditemukan.</p></div>';
+            return;
+        }
 
-        let html = `
-        <div class="container" style="padding-top:30px;">
-            <div class="detail-header">
-                <div class="detail-backdrop" style="background-image:url('${d.cover?.url || ''}')"></div>
-                <div class="detail-backdrop-overlay"></div>
-                <div class="detail-content">
-                    <div class="detail-poster">
-                        <img src="${d.cover?.url || 'https://via.placeholder.com/300x450/1a1a2e/666?text=No+Image'}" 
-                             alt="${escHtml(d.title)}"
-                             onerror="this.src='https://via.placeholder.com/300x450/1a1a2e/666?text=No+Image'">
-                    </div>
-                    <div class="detail-info">
-                        <h1>${escHtml(d.title)}</h1>
-                        <div class="detail-meta">
-                            ${d.releaseDate ? `<span><i class="fas fa-calendar"></i> ${formatDate(d.releaseDate)}</span>` : ''}
-                            ${d.duration ? `<span><i class="fas fa-clock"></i> ${d.duration}</span>` : ''}
-                            ${d.imdbRatingValue ? `<span class="imdb-rating"><i class="fas fa-star"></i> IMDb ${d.imdbRatingValue}</span>` : ''}
-                            ${d.countryName ? `<span><i class="fas fa-map-pin"></i> ${escHtml(d.countryName)}</span>` : ''}
-                            ${d.language ? `<span><i class="fas fa-language"></i> ${escHtml(d.language)}</span>` : ''}
-                            ${isSeries ? '<span><i class="fas fa-list"></i> Series</span>' : '<span><i class="fas fa-film"></i> Movie</span>'}
-                            ${d.viewers ? `<span><i class="fas fa-eye"></i> ${d.viewers.toLocaleString()} viewers</span>` : ''}
-                        </div>
-                        <div class="detail-genre">${genres.map((g) => `<span>${escHtml(g)}</span>`).join('')}</div>
-                        <p class="detail-desc">${d.description || 'Tidak ada deskripsi.'}</p>
-                        <div class="detail-actions">
-                            <button class="btn-primary" onclick="playMovie('${d.subjectId}', '${escHtml(d.title)}')">
-                                <i class="fas fa-play"></i> Putar Video
-                            </button>
-                            <button class="btn-secondary" onclick="downloadMovie('${d.subjectId}', '${escHtml(d.title)}')">
-                                <i class="fas fa-download"></i> Download
-                            </button>
-                        </div>
-                        ${cast.length > 0 ? `
-                        <div class="detail-cast">
-                            <h3><i class="fas fa-users"></i> Pemain</h3>
-                            <div class="cast-grid">
-                                ${cast.slice(0, 10).map((c) => `
-                                    <div class="cast-item">
-                                        <img src="${c.avatarUrl || 'https://via.placeholder.com/60x60/1a1a2e/666?text=' + c.name.charAt(0)}" 
-                                             alt="${escHtml(c.name)}"
-                                             onerror="this.src='https://via.placeholder.com/60x60/1a1a2e/666?text=${c.name.charAt(0)}'">
-                                        <div class="cast-name">${escHtml(c.name)}</div>
-                                        <div class="cast-role">${escHtml(c.character)}</div>
-                                    </div>`).join('')}
-                            </div>
-                        </div>` : ''}
-                    </div>
-                </div>
-            </div>
-        </div>`;
+        var d = data.data;
+        var isSeries = d.subjectType === 2;
+        var genres = d.genre ? d.genre.split(',').map(function(g) { return g.trim(); }) : [];
+        var cast = d.staffList ? d.staffList.filter(function(s) { return s.staffType === 1; }) : [];
+        var img = imgUrl(d.cover);
+        var imdb = getImdb(d);
+        var sid = d.subjectId;
 
-        // ─── Episodes / Download Section ───
-        html += `<div class="container section-episodes">`;
+        var html = '<div class="container" style="padding-top:30px">' +
+            '<div class="detail-header">' +
+                '<div class="detail-backdrop" style="background-image:url(\'' + img + '\')"></div>' +
+                '<div class="detail-backdrop-overlay"></div>' +
+                '<div class="detail-content">' +
+                    '<div class="detail-poster">' +
+                        '<img src="' + img + '" alt="' + escHtml(d.title) + '" onerror="this.src=\'' + PLACEHOLDER + '\'">' +
+                    '</div>' +
+                    '<div class="detail-info">' +
+                        '<h1>' + escHtml(d.title) + '</h1>' +
+                        '<div class="detail-meta">' +
+                            (d.releaseDate ? '<span><i class="fas fa-calendar"></i> ' + formatDate(d.releaseDate) + '</span>' : '') +
+                            (d.duration ? '<span><i class="fas fa-clock"></i> ' + d.duration + '</span>' : '') +
+                            (imdb ? '<span class="imdb-rating"><i class="fas fa-star"></i> IMDb ' + imdb + '</span>' : '') +
+                            (d.countryName ? '<span><i class="fas fa-map-pin"></i> ' + escHtml(d.countryName) + '</span>' : '') +
+                            (d.language ? '<span><i class="fas fa-language"></i> ' + escHtml(d.language) + '</span>' : '') +
+                            '<span><i class="fas ' + (isSeries ? 'fa-list' : 'fa-film') + '"></i> ' + (isSeries ? 'Series' : 'Movie') + '</span>' +
+                            (d.viewers ? '<span><i class="fas fa-eye"></i> ' + Number(d.viewers).toLocaleString() + ' viewers</span>' : '') +
+                        '</div>' +
+                        '<div class="detail-genre">' + genres.map(function(g) { return '<span>' + escHtml(g) + '</span>'; }).join('') + '</div>' +
+                        '<p class="detail-desc">' + (d.description || 'Tidak ada deskripsi.') + '</p>' +
+                        '<div class="detail-actions">' +
+                            '<button class="btn-primary" onclick="playMovie(\'' + sid + '\')"><i class="fas fa-play"></i> Putar Video</button>' +
+                            '<button class="btn-secondary" onclick="downloadMovie(\'' + sid + '\')"><i class="fas fa-download"></i> Download</button>' +
+                        '</div>';
+
+        if (cast.length > 0) {
+            html += '<div class="detail-cast"><h3><i class="fas fa-users"></i> Pemain</h3><div class="cast-grid">';
+            cast.slice(0, 10).forEach(function(c) {
+                var av = c.avatarUrl || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(c.name) + '&background=1a1a2e&color=fff&size=60';
+                html += '<div class="cast-item"><img src="' + av + '" alt="' + escHtml(c.name) + '" onerror="this.src=\'https://ui-avatars.com/api/?name=' + encodeURIComponent(c.name) + '&background=1a1a2e&color=fff&size=60\'"><div class="cast-name">' + escHtml(c.name) + '</div><div class="cast-role">' + escHtml(c.character) + '</div></div>';
+            });
+            html += '</div></div>';
+        }
+
+        html += '</div></div></div></div>';
+
+        // EPISODES / DOWNLOAD
+        html += '<div class="container section-episodes">';
 
         if (isSeries) {
-            html += `<h3><i class="fas fa-list-ol"></i> Episode</h3><div class="episode-list">`;
-            try {
-                const dlRes = await fetch(`${CONFIG.API_BASE}/moviebox/download-series?subjectId=${d.subjectId}&season=1&resolution=360`);
-                const dlData = await dlRes.json();
-                if (dlData.data && dlData.data.episodes) {
-                    dlData.data.episodes.forEach((ep) => {
-                        html += `
-                        <div class="episode-card">
-                            <div class="ep-info">
-                                <h4>Episode ${ep.ep}</h4>
-                                <p>${ep.title || `Season ${ep.se} - Episode ${ep.ep}`} • ${formatSize(ep.size)}</p>
-                            </div>
-                            <div class="ep-actions">
-                                <button class="btn-play-ep" onclick='openPlayer("${ep.resourceLink}", "${escHtml(d.title)} - Episode ${ep.ep}")'>
-                                    <i class="fas fa-play"></i>
-                                </button>
-                                <a href="${ep.resourceLink}" target="_blank" class="btn-download-ep" download>
-                                    <i class="fas fa-download"></i>
-                                </a>
-                            </div>
-                        </div>`;
+            html += '<h3><i class="fas fa-list-ol"></i> Episode</h3><div class="episode-list">';
+            api(CONFIG.API_BASE + '/moviebox/download-series?subjectId=' + sid + '&season=1&resolution=360').then(function(dl) {
+                if (dl && dl.data && dl.data.episodes) {
+                    dl.data.episodes.forEach(function(ep) {
+                        html += '<div class="episode-card">' +
+                            '<div class="ep-info"><h4>Episode ' + ep.ep + '</h4><p>' + (ep.title || 'Season ' + ep.se + ' - Episode ' + ep.ep) + ' &bull; ' + formatSize(ep.size) + '</p></div>' +
+                            '<div class="ep-actions">' +
+                                '<button class="btn-play-ep" onclick="openPlayer(\'' + ep.resourceLink + '\',\'' + escHtml(d.title) + ' - Ep ' + ep.ep + '\')"><i class="fas fa-play"></i></button>' +
+                                '<a href="' + ep.resourceLink + '" target="_blank" class="btn-download-ep" download><i class="fas fa-download"></i></a>' +
+                            '</div>' +
+                        '</div>';
                     });
+                } else {
+                    html += '<p style="color:var(--text-muted);grid-column:1/-1">Data episode tidak tersedia.</p>';
                 }
-            } catch (e) {
-                html += `<p style="color:var(--text-muted)">Gunakan tombol Download untuk mengunduh episode.</p>`;
-            }
-            html += `</div>`;
+                html += '</div>';
+                var pc2 = $('pageContent');
+                if (pc2) pc2.innerHTML = html + '</div>';
+            });
+            return; // Wait for async episode load
         } else {
-            html += `<h3><i class="fas fa-download"></i> Download & Resolusi</h3>
-            <div class="resolution-tabs" id="resolutionTabs">
-                <button class="resolution-tab active" onclick="selectResolution('${d.subjectId}', 360, this)">360P</button>
-                <button class="resolution-tab" onclick="selectResolution('${d.subjectId}', 480, this)">480P</button>
-                <button class="resolution-tab" onclick="selectResolution('${d.subjectId}', 720, this)">720P</button>
-                <button class="resolution-tab" onclick="selectResolution('${d.subjectId}', 1080, this)">1080P</button>
-            </div>
-            <div id="downloadInfo"><div class="episode-list">`;
-
-            try {
-                const dlRes = await fetch(`${CONFIG.API_BASE}/moviebox/download-movie?subjectId=${d.subjectId}&resolution=360`);
-                const dlData = await dlRes.json();
-                if (dlData.data && dlData.data.files) {
-                    dlData.data.files.forEach((f) => {
-                        html += `
-                        <div class="episode-card">
-                            <div class="ep-info">
-                                <h4>${f.resolution}P</h4>
-                                <p>${(f.codecName || 'H.264').toUpperCase()} • ${formatSize(f.size)}</p>
-                            </div>
-                            <div class="ep-actions">
-                                <button class="btn-play-ep" onclick='openPlayer("${f.resourceLink}", "${escHtml(d.title)} - ${f.resolution}P")'>
-                                    <i class="fas fa-play"></i> Putar
-                                </button>
-                                <a href="${f.resourceLink}" target="_blank" class="btn-download-ep" download>
-                                    <i class="fas fa-download"></i> Download
-                                </a>
-                            </div>
-                        </div>`;
+            html += '<h3><i class="fas fa-download"></i> Download &amp; Resolusi</h3>' +
+                '<div class="resolution-tabs" id="resolutionTabs">' +
+                [360, 480, 720, 1080].map(function(r, i) {
+                    return '<button class="resolution-tab' + (i === 0 ? ' active' : '') + '" onclick="selectResolution(\'' + sid + '\',' + r + ',this)">' + r + 'P</button>';
+                }).join('') +
+                '</div><div id="downloadInfo"><div class="episode-list">';
+            api(CONFIG.API_BASE + '/moviebox/download-movie?subjectId=' + sid + '&resolution=360').then(function(dl) {
+                if (dl && dl.data && dl.data.files) {
+                    dl.data.files.forEach(function(f) {
+                        html += '<div class="episode-card">' +
+                            '<div class="ep-info"><h4>' + f.resolution + 'P</h4><p>' + (f.codecName || 'H.264').toUpperCase() + ' &bull; ' + formatSize(f.size) + '</p></div>' +
+                            '<div class="ep-actions">' +
+                                '<button class="btn-play-ep" onclick="openPlayer(\'' + f.resourceLink + '\',\'' + escHtml(d.title) + ' - ' + f.resolution + 'P\')"><i class="fas fa-play"></i> Putar</button>' +
+                                '<a href="' + f.resourceLink + '" target="_blank" class="btn-download-ep" download><i class="fas fa-download"></i></a>' +
+                            '</div>' +
+                        '</div>';
                     });
+                    if (dl.data.subtitle) {
+                        html += '<div style="margin-top:15px;padding:15px;background:var(--bg-card);border-radius:var(--radius-sm)"><p style="color:var(--text-muted);font-size:.85rem"><i class="fas fa-closed-captioning"></i> Subtitle: ' + dl.data.subtitle.lanName + ' <a href="' + dl.data.subtitle.url + '" target="_blank" style="color:var(--primary);margin-left:10px">Download SRT</a></p></div>';
+                    }
+                } else {
+                    html += '<p style="color:var(--text-muted);grid-column:1/-1">Data download tidak tersedia.</p>';
                 }
-            } catch (e) {
-                html += `<p style="color:var(--text-muted)">Tidak ada data download tersedia.</p>`;
-            }
-            html += `</div></div>`;
+                html += '</div></div></div>';
+                var pc2 = $('pageContent');
+                if (pc2) pc2.innerHTML = html;
+            });
+            return; // Wait for async download load
         }
-        html += `</div>`;
-        $('pageContent').innerHTML = html;
-    } catch (err) {
-        console.error('Detail load error:', err);
+    }).catch(function(err) {
+        console.error('Detail:', err);
         hideLoader();
-        $('pageContent').innerHTML = `<div class="container empty-state" style="padding-top:50px;"><i class="fas fa-exclamation-triangle" style="color:var(--primary)"></i><p>Gagal memuat detail.</p></div>`;
-    }
+        var pc = $('pageContent');
+        if (pc) pc.innerHTML = '<div class="container empty-state" style="padding-top:50px"><i class="fas fa-exclamation-triangle" style="color:var(--primary)"></i><p>Gagal memuat detail.</p></div>';
+    });
 }
 
 // ==========================================
 // RESOLUTION SELECTOR
 // ==========================================
 
-async function selectResolution(subjectId, resolution, btn) {
-    qsa('.resolution-tab').forEach((t) => t.classList.remove('active'));
+function selectResolution(sid, res, btn) {
+    qsa('.resolution-tab').forEach(function(t) { t.classList.remove('active'); });
     btn.classList.add('active');
-    const infoDiv = $('downloadInfo');
-    infoDiv.innerHTML = `<div style="display:flex;justify-content:center;padding:30px;"><div class="loader"></div></div>`;
-
-    try {
-        const res = await fetch(`${CONFIG.API_BASE}/moviebox/download-movie?subjectId=${subjectId}&resolution=${resolution}`);
-        const data = await res.json();
-        if (data.data && data.data.files) {
-            let html = `<div class="episode-list">`;
-            data.data.files.forEach((f) => {
-                html += `
-                <div class="episode-card">
-                    <div class="ep-info">
-                        <h4>${f.resolution}P</h4>
-                        <p>${(f.codecName || 'H.264').toUpperCase()} • ${formatSize(f.size)}</p>
-                    </div>
-                    <div class="ep-actions">
-                        <button class="btn-play-ep" onclick='openPlayer("${f.resourceLink}", "${escHtml(data.data.title)} - ${f.resolution}P")'>
-                            <i class="fas fa-play"></i> Putar
-                        </button>
-                        <a href="${f.resourceLink}" target="_blank" class="btn-download-ep" download>
-                            <i class="fas fa-download"></i> Download
-                        </a>
-                    </div>
-                </div>`;
+    var div = $('downloadInfo');
+    if (!div) return;
+    div.innerHTML = '<div style="display:flex;justify-content:center;padding:30px"><div class="loader"></div></div>';
+    api(CONFIG.API_BASE + '/moviebox/download-movie?subjectId=' + sid + '&resolution=' + res).then(function(dl) {
+        if (dl && dl.data && dl.data.files) {
+            var h = '<div class="episode-list">';
+            dl.data.files.forEach(function(f) {
+                h += '<div class="episode-card"><div class="ep-info"><h4>' + f.resolution + 'P</h4><p>' + (f.codecName || 'H.264').toUpperCase() + ' &bull; ' + formatSize(f.size) + '</p></div><div class="ep-actions"><button class="btn-play-ep" onclick="openPlayer(\'' + f.resourceLink + '\',\'' + escHtml(dl.data.title) + ' - ' + f.resolution + 'P\')"><i class="fas fa-play"></i> Putar</button><a href="' + f.resourceLink + '" target="_blank" class="btn-download-ep" download><i class="fas fa-download"></i></a></div></div>';
             });
-            html += `</div>`;
-            if (data.data.subtitle) {
-                html += `<div style="margin-top:15px;padding:15px;background:var(--bg-card);border-radius:var(--radius-sm);">
-                    <p style="color:var(--text-muted);font-size:0.85rem;">
-                        <i class="fas fa-closed-captioning"></i> Subtitle: ${data.data.subtitle.lanName}
-                        <a href="${data.data.subtitle.url}" target="_blank" style="color:var(--primary);margin-left:10px;">Download SRT</a>
-                    </p>
-                </div>`;
+            h += '</div>';
+            if (dl.data.subtitle) {
+                h += '<div style="margin-top:15px;padding:15px;background:var(--bg-card);border-radius:var(--radius-sm)"><p style="color:var(--text-muted);font-size:.85rem"><i class="fas fa-closed-captioning"></i> Subtitle: ' + dl.data.subtitle.lanName + ' <a href="' + dl.data.subtitle.url + '" target="_blank" style="color:var(--primary);margin-left:10px">Download SRT</a></p></div>';
             }
-            infoDiv.innerHTML = html;
+            div.innerHTML = h;
         } else {
-            infoDiv.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:20px;">Resolusi tidak tersedia.</p>`;
+            div.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:20px">Resolusi tidak tersedia.</p>';
         }
-    } catch (err) {
-        infoDiv.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:20px;">Gagal memuat data.</p>`;
-    }
+    });
 }
 
 // ==========================================
-// PLAY MOVIE
+// PLAY / DOWNLOAD
 // ==========================================
 
-async function playMovie(subjectId, title) {
-    try {
-        const res = await fetch(`${CONFIG.API_BASE}/moviebox/download-movie?subjectId=${subjectId}&resolution=0`);
-        const data = await res.json();
-        if (data.data && data.data.files && data.data.files.length > 0) {
-            openPlayer(data.data.files[0].resourceLink, title);
+function playMovie(sid) {
+    api(CONFIG.API_BASE + '/moviebox/download-movie?subjectId=' + sid + '&resolution=0').then(function(dl) {
+        if (dl && dl.data && dl.data.files && dl.data.files.length > 0) {
+            openPlayer(dl.data.files[0].resourceLink, dl.data.title || 'Movie');
         } else {
-            showToast('Tidak ada sumber video yang tersedia.');
+            toast('Tidak ada sumber video.');
         }
-    } catch (err) {
-        showToast('Gagal memuat video.');
-    }
+    });
 }
 
-// ==========================================
-// DOWNLOAD MOVIE
-// ==========================================
-
-async function downloadMovie(subjectId, title) {
-    try {
-        const res = await fetch(`${CONFIG.API_BASE}/moviebox/download-movie?subjectId=${subjectId}&resolution=720`);
-        const data = await res.json();
-        if (data.data && data.data.files && data.data.files.length > 0) {
-            const best = data.data.files.reduce((a, b) => (a.resolution > b.resolution ? a : b));
+function downloadMovie(sid) {
+    api(CONFIG.API_BASE + '/moviebox/download-movie?subjectId=' + sid + '&resolution=720').then(function(dl) {
+        if (dl && dl.data && dl.data.files && dl.data.files.length > 0) {
+            var best = dl.data.files.reduce(function(a, b) { return a.resolution > b.resolution ? a : b; });
             window.open(best.resourceLink, '_blank');
-            showToast(`Downloading ${title} - ${best.resolution}P`);
+            toast('Download ' + (dl.data.title || '') + ' - ' + best.resolution + 'P');
         } else {
-            showToast('Tidak ada link download.');
+            toast('Link download tidak tersedia.');
         }
-    } catch (err) {
-        showToast('Gagal mendapatkan link download.');
-    }
+    });
 }
 
 // ==========================================
-// OPEN VIDEO PLAYER
+// VIDEO PLAYER (Mobile Friendly)
 // ==========================================
 
-function openPlayer(videoUrl, title) {
-    $('modalTitle').textContent = title || 'Player';
-    const player = $('videoPlayer');
-    player.src = videoUrl;
-    player.load();
-    $('downloadBtn').href = videoUrl;
-    $('videoModal').classList.add('active');
+function openPlayer(url, title) {
+    var mt = $('modalTitle');
+    if (mt) mt.textContent = title || 'Player';
+    var p = $('videoPlayer');
+    if (p) {
+        p.src = url;
+        p.setAttribute('playsinline', '');
+        p.setAttribute('webkit-playsinline', '');
+        p.setAttribute('x5-playsinline', '');
+        p.load();
+    }
+    var db = $('downloadBtn');
+    if (db) db.href = url;
+    var vm = $('videoModal');
+    if (vm) vm.classList.add('active');
 }
 
 function closeModal(e) {
     if (e && e.target !== $('videoModal')) return;
-    $('videoModal').classList.remove('active');
-    $('videoPlayer').pause();
-    $('videoPlayer').src = '';
+    var vm = $('videoModal');
+    if (vm) vm.classList.remove('active');
+    var p = $('videoPlayer');
+    if (p) { p.pause(); p.src = ''; p.removeAttribute('src'); }
 }
 
 // ==========================================
@@ -628,72 +557,42 @@ function closeModal(e) {
 // ==========================================
 
 function toggleSearch() {
-    $('searchBar').classList.toggle('active');
-    if ($('searchBar').classList.contains('active')) $('searchInput').focus();
+    var sb = $('searchBar');
+    if (!sb) return;
+    sb.classList.toggle('active');
+    if (sb.classList.contains('active')) {
+        var si = $('searchInput');
+        if (si) si.focus();
+    }
 }
 
-async function searchMovies(query) {
-    const q = query || $('searchInput').value.trim();
+function searchMovies(query) {
+    var q = query || ($('searchInput') ? $('searchInput').value.trim() : '');
     if (!q) return;
-    $('searchBar').classList.remove('active');
+    var sb = $('searchBar');
+    if (sb) sb.classList.remove('active');
     showLoader();
 
-    try {
-        const url = `${CONFIG.API_BASE}/moviebox/search?keyword=${encodeURIComponent(q)}&page=${currentParams.page}&perPage=${CONFIG.PER_PAGE}`;
-        const res = await fetch(url);
-        const data = await res.json();
+    api(CONFIG.API_BASE + '/moviebox/search?keyword=' + encodeURIComponent(q) + '&page=1&perPage=' + CONFIG.PER_PAGE).then(function(data) {
         hideLoader();
 
-        let html = `<div class="container" style="padding-top:30px;">
-            <div class="search-results-info">
-                <h2><i class="fas fa-search"></i> Hasil Pencarian: "${escHtml(q)}"</h2>
-            </div>`;
+        var html = '<div class="container" style="padding-top:30px"><div class="search-results-info"><h2><i class="fas fa-search"></i> Pencarian: "' + escHtml(q) + '"</h2></div>';
 
-        const items = [];
-        if (data.data && data.data.results) {
-            data.data.results.forEach((item) => {
+        var items = [];
+        if (data && data.data && data.data.results) {
+            data.data.results.forEach(function(item) {
                 if (item.topicType === 'SUBJECT' && item.subjects) {
-                    item.subjects.forEach((s) => items.push(s));
+                    item.subjects.forEach(function(s) { items.push(s); });
                 }
             });
         }
 
-        if (items.length > 0) {
-            html += `<div class="movie-grid">`;
-            items.forEach((s) => { html += renderMovieCard(s); });
-            html += `</div>`;
-        } else {
-            html += `<div class="empty-state"><i class="fas fa-search-minus"></i><p>Tidak ada hasil untuk "${escHtml(q)}"</p></div>`;
-        }
-        html += `</div>`;
-        $('pageContent').innerHTML = html;
-    } catch (err) {
-        hideLoader();
-        $('pageContent').innerHTML = `<div class="container empty-state" style="padding-top:50px;"><i class="fas fa-exclamation-triangle" style="color:var(--primary)"></i><p>Gagal mencari.</p></div>`;
-    }
-}
+        html += items.length > 0 ? renderGrid(items) : '<div class="empty-state"><i class="fas fa-search-minus"></i><p>Tidak ada hasil untuk "' + escHtml(q) + '"</p></div>';
+        html += '</div>';
 
-// ==========================================
-// PAGINATION
-// ==========================================
-
-function renderPagination() {
-    const page = currentParams.page;
-    return `
-    <div class="pagination">
-        <button ${page <= 1 ? 'disabled' : ''} onclick="changePage(${page - 1})">
-            <i class="fas fa-chevron-left"></i> Sebelumnya
-        </button>
-        <span>Halaman ${page}</span>
-        <button onclick="changePage(${page + 1})">
-            Selanjutnya <i class="fas fa-chevron-right"></i>
-        </button>
-    </div>`;
-}
-
-function changePage(newPage) {
-    currentParams.page = newPage;
-    navigate(currentPage, { page: newPage });
+        var pc = $('pageContent');
+        if (pc) pc.innerHTML = html;
+    });
 }
 
 // ==========================================
@@ -701,19 +600,25 @@ function changePage(newPage) {
 // ==========================================
 
 function toggleMobileMenu() {
-    $('navMenu').classList.toggle('active');
+    var nm = $('navMenu');
+    if (nm) nm.classList.toggle('active');
 }
 
 // ==========================================
 // INIT
 // ==========================================
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Movie Free by R v2 starting...');
+    console.log('API: ' + CONFIG.API_BASE);
     navigate('home');
-    window.addEventListener('resize', () => {
-        if (window.innerWidth > 768) $('navMenu').classList.remove('active');
+    window.addEventListener('resize', function() {
+        if (window.innerWidth > 768) {
+            var nm = $('navMenu');
+            if (nm) nm.classList.remove('active');
+        }
     });
-    document.addEventListener('keydown', (e) => {
+    document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') closeModal();
     });
 });
