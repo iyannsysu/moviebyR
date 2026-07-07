@@ -529,38 +529,52 @@ function downloadMovie(sid) {
 
 function openPlayer(url, title) {
     var mt = document.getElementById('modalTitle');
-    if (mt) mt.textContent = title || 'Player';
+    if (mt) mt.textContent = title || '';
 
+    // Reset loading
+    var pl = document.getElementById('playerLoading');
+    if (pl) {
+        pl.style.display = 'flex';
+        pl.innerHTML = '<div class="loader"></div><span>Memuat video...</span>';
+    }
+
+    // Setup video element
     var p = document.getElementById('videoPlayer');
     if (p) {
-        p.removeAttribute('src');
-        p.setAttribute('src', url);
-        p.setAttribute('playsinline', '');
-        p.setAttribute('webkit-playsinline', '');
-        p.setAttribute('x5-playsinline', '');
-        p.setAttribute('x5-video-player-type', 'h5');
-        p.setAttribute('x5-video-player-fullscreen', 'true');
+        // Stop any previous playback
+        p.pause();
+        // Set src directly as property (more reliable than setAttribute)
+        p.src = url;
         p.load();
     }
 
-    var pl = document.getElementById('playerLoading');
-    if (pl) pl.style.display = 'flex';
-
+    // Update download buttons
     var db1 = document.getElementById('downloadBtn');
     var db2 = document.getElementById('downloadBtnBottom');
-    if (db1) db1.setAttribute('href', url);
-    if (db2) db2.setAttribute('href', url);
+    if (db1) db1.href = url;
+    if (db2) db2.href = url;
 
+    // Show player modal
     document.body.style.overflow = 'hidden';
     var vm = document.getElementById('videoModal');
     if (vm) vm.classList.add('active');
 
+    // Handle video events
     if (p) {
-        p.oncanplay = function() { if (pl) pl.style.display = 'none'; };
-        p.onerror = function() {
-            if (pl) pl.innerHTML = '<span style="color:#e50914;font-size:0.9rem">Gagal memuat. <a href="' + url + '" target="_blank" style="color:#fff;text-decoration:underline">Download langsung</a></span>';
+        p.oncanplay = function() {
+            if (pl) pl.style.display = 'none';
         };
-        p.onplaying = function() { if (pl) pl.style.display = 'none'; };
+        p.onplaying = function() {
+            if (pl) pl.style.display = 'none';
+        };
+        p.onwaiting = function() {
+            if (pl) pl.style.display = 'flex';
+        };
+        p.onerror = function() {
+            if (pl) {
+                pl.innerHTML = '<span style="color:#e50914;font-size:0.9rem">Gagal memuat. <a href="' + url + '" target="_blank" style="color:#fff;text-decoration:underline">Download langsung</a></span>';
+            }
+        };
     }
 }
 
@@ -574,11 +588,11 @@ function closeModal(e) {
     var p = document.getElementById('videoPlayer');
     if (p) {
         p.pause();
-        p.removeAttribute('src');
-        p.load();
+        p.src = '';
         p.oncanplay = null;
-        p.onerror = null;
         p.onplaying = null;
+        p.onwaiting = null;
+        p.onerror = null;
     }
     var pl = document.getElementById('playerLoading');
     if (pl) {
