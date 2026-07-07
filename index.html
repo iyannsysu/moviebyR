@@ -1,154 +1,109 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Movie Free by R - Nonton Movie & Series Gratis</title>
-    <meta name="description" content="Movie Free by R - Nonton movie dan series streaming gratis. Lengkap dengan episode, download multi-resolusi, dan update otomatis setiap hari.">
-    <meta name="keywords" content="movie gratis, nonton film, streaming, download film, series, drama, MovieBox, movie free">
-    <meta name="author" content="Movie Free by R">
-    <meta name="robots" content="index, follow">
-    
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://movie-free-by-r.vercel.app/">
-    <meta property="og:title" content="Movie Free by R - Nonton Movie & Series Gratis">
-    <meta property="og:description" content="Nonton movie dan series streaming gratis. Lengkap dengan episode, download multi-resolusi, update otomatis.">
-    <meta property="og:image" content="https://pbcdn.aoneroom.com/image/2026/06/25/91f1e0b16b9984348253573f996d686f.jpg">
-
-    <!-- Twitter -->
-    <meta property="twitter:card" content="summary_large_image">
-    <meta property="twitter:url" content="https://movie-free-by-r.vercel.app/">
-    <meta property="twitter:title" content="Movie Free by R - Nonton Movie & Series Gratis">
-    <meta property="twitter:description" content="Nonton movie dan series streaming gratis. Lengkap dengan episode, download multi-resolusi, update otomatis.">
-    <meta property="twitter:image" content="https://pbcdn.aoneroom.com/image/2026/06/25/91f1e0b16b9984348253573f996d686f.jpg">
-
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
-    <link rel="stylesheet" href="css/style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Movie Free by R - Nonton Movie & Series Gratis</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎬</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
-    <!-- Header / Navbar -->
-    <header class="header">
-        <div class="container header-inner">
-            <a href="#" class="logo" onclick="navigate('home')">
-                <span class="logo-icon">🎬</span>
-                <span class="logo-text">Movie <span class="logo-highlight">Free</span> <small>by R</small></span>
-            </a>
-            <nav class="nav-menu" id="navMenu">
-                <a href="#" class="nav-link active" onclick="navigate('home')" data-page="home">Beranda</a>
-                <a href="#" class="nav-link" onclick="navigate('global')" data-page="global">Global</a>
-                <a href="#" class="nav-link" onclick="navigate('indonesia')" data-page="indonesia">Indonesia</a>
-                <a href="#" class="nav-link" onclick="navigate('hollywood')" data-page="hollywood">Hollywood</a>
-                <a href="#" class="nav-link" onclick="navigate('asia')" data-page="asia">Asia</a>
-                <a href="#" class="nav-link" onclick="navigate('horror')" data-page="horror">Horror</a>
-                <a href="#" class="nav-link" onclick="navigate('animasi')" data-page="animasi">Animasi</a>
-                <a href="#" class="nav-link" onclick="navigate('series')" data-page="series">Series</a>
-            </nav>
-            <div class="header-actions">
-                <button class="search-toggle" onclick="toggleSearch()" title="Cari Film">
-                    <i class="fas fa-search"></i>
-                </button>
-                <button class="menu-toggle" id="menuToggle" onclick="toggleMobileMenu()" aria-label="Menu">
-                    <i class="fas fa-bars"></i>
-                </button>
-            </div>
-        </div>
-        <!-- Search Bar -->
-        <div class="search-bar" id="searchBar">
-            <div class="container search-bar-inner">
-                <input type="text" id="searchInput" placeholder="Cari film atau series..." onkeypress="if(event.key==='Enter') searchMovies()">
-                <button onclick="searchMovies()"><i class="fas fa-search"></i> Cari</button>
-                <button class="search-close" onclick="toggleSearch()" aria-label="Tutup"><i class="fas fa-times"></i></button>
-            </div>
-        </div>
-    </header>
 
-    <!-- Main Content -->
-    <main class="main-content" id="mainContent">
-        <div class="loader-container" id="loader">
-            <div class="loader"></div>
-            <p>Memuat data...</p>
-        </div>
-        <div id="pageContent"></div>
-    </main>
-
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-grid">
-                <div class="footer-col">
-                    <h3>🎬 Movie Free by R</h3>
-                    <p>Platform nonton movie dan series gratis. Data diperbarui secara otomatis dari MovieBox API.</p>
-                    <div class="footer-social">
-                        <a href="https://api.sonzaix.indevs.in/" target="_blank" rel="noopener" title="API"><i class="fas fa-server"></i></a>
-                        <a href="https://t.me/November2k" target="_blank" rel="noopener" title="Telegram"><i class="fab fa-telegram"></i></a>
-                        <a href="https://github.com/sonzaiekkusu" target="_blank" rel="noopener" title="GitHub"><i class="fab fa-github"></i></a>
-                    </div>
-                </div>
-                <div class="footer-col">
-                    <h4>Kategori</h4>
-                    <a href="#" onclick="navigate('global')">Global</a>
-                    <a href="#" onclick="navigate('indonesia')">Indonesia</a>
-                    <a href="#" onclick="navigate('hollywood')">Hollywood</a>
-                    <a href="#" onclick="navigate('asia')">Asia</a>
-                    <a href="#" onclick="navigate('horror')">Horror</a>
-                    <a href="#" onclick="navigate('animasi')">Animasi</a>
-                </div>
-                <div class="footer-col">
-                    <h4>Series</h4>
-                    <a href="#" onclick="navigate('series-kdrama')">K-Drama</a>
-                    <a href="#" onclick="navigate('series-indo')">Indo Drama</a>
-                    <a href="#" onclick="navigate('series-anime')">Anime</a>
-                    <a href="#" onclick="navigate('series-barat')">Barat</a>
-                    <a href="#" onclick="navigate('series-cdrama')">C-Drama</a>
-                    <a href="#" onclick="navigate('series-thai')">Thai-Drama</a>
-                </div>
-                <div class="footer-col">
-                    <h4>Tentang</h4>
-                    <p>Movie Free by R adalah website nonton film dan series streaming gratis. Semua data berasal dari MovieBox API.</p>
-                    <p class="footer-api">API: <a href="https://api.sonzaix.indevs.in/" target="_blank" rel="noopener">Sonzai X API</a></p>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; 2026 Movie Free by R. All rights reserved.</p>
-            </div>
-        </div>
-    </footer>
-
-    <!-- Video Player - Fullscreen Mobile Optimized -->
-    <div class="player-overlay" id="videoModal" onclick="closeModal(event)">
-        <div class="player-wrap">
-            <div class="player-topbar">
-                <span class="player-title" id="modalTitle">Player</span>
-                <div class="player-top-actions">
-                    <a id="downloadBtn" href="#" target="_blank" class="player-dl-btn" title="Download">
-                        <i class="fas fa-download"></i>
-                    </a>
-                    <button class="player-close" onclick="closeModal()" aria-label="Tutup">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="player-stage" id="playerStage">
-                <video id="videoPlayer" controls playsinline style="width:100%;height:100%;position:absolute;top:0;left:0;object-fit:contain;background:#000;">
-                    <p>Browser tidak mendukung video player.</p>
-                </video>
-                <div class="player-loading" id="playerLoading">
-                    <div class="loader"></div>
-                    <span>Memuat video...</span>
-                </div>
-            </div>
-            <div class="player-bottom">
-                <a id="downloadBtnBottom" href="#" target="_blank" class="btn-download">
-                    <i class="fas fa-download"></i> Download Video
-                </a>
-            </div>
-        </div>
+<header class="header">
+  <div class="container header-inner">
+    <a href="#" class="logo" onclick="navigate('home')">
+      <span class="logo-text">Movie <span class="logo-highlight">Free</span> <small>by R</small></span>
+    </a>
+    <nav class="nav-menu" id="navMenu">
+      <a href="#" class="nav-link active" onclick="navigate('home')" data-page="home">Beranda</a>
+      <a href="#" class="nav-link" onclick="navigate('global')" data-page="global">Global</a>
+      <a href="#" class="nav-link" onclick="navigate('indonesia')" data-page="indonesia">Indonesia</a>
+      <a href="#" class="nav-link" onclick="navigate('hollywood')" data-page="hollywood">Hollywood</a>
+      <a href="#" class="nav-link" onclick="navigate('asia')" data-page="asia">Asia</a>
+      <a href="#" class="nav-link" onclick="navigate('horror')" data-page="horror">Horror</a>
+      <a href="#" class="nav-link" onclick="navigate('animasi')" data-page="animasi">Animasi</a>
+      <a href="#" class="nav-link" onclick="navigate('series')" data-page="series">Series</a>
+    </nav>
+    <div class="header-actions">
+      <button class="search-toggle" onclick="toggleSearch()" title="Cari"><i class="fas fa-search"></i></button>
+      <button class="menu-toggle" onclick="toggleMobileMenu()" aria-label="Menu"><i class="fas fa-bars"></i></button>
     </div>
+  </div>
+  <div class="search-bar" id="searchBar">
+    <div class="container search-bar-inner">
+      <input type="text" id="searchInput" placeholder="Cari film atau series..." onkeypress="if(event.key==='Enter')searchMovies()">
+      <button onclick="searchMovies()"><i class="fas fa-search"></i> Cari</button>
+      <button class="search-close" onclick="toggleSearch()"><i class="fas fa-times"></i></button>
+    </div>
+  </div>
+</header>
 
+<main class="main-content" id="mainContent">
+  <div class="loader-container" id="loader">
+    <div class="loader"></div>
+    <p>Memuat data...</p>
+  </div>
+  <div id="pageContent"></div>
+</main>
 
-    <script src="js/config.js"></script>
-    <script src="js/app.js"></script>
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-col">
+        <h4>Movie Free by R</h4>
+        <p>Nonton movie & series gratis. Data dari MovieBox API.</p>
+        <div class="footer-social">
+          <a href="https://t.me/November2k" target="_blank"><i class="fab fa-telegram"></i></a>
+          <a href="https://github.com/sonzaiekkusu" target="_blank"><i class="fab fa-github"></i></a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h4>Kategori</h4>
+        <a href="#" onclick="navigate('global')">Global</a>
+        <a href="#" onclick="navigate('indonesia')">Indonesia</a>
+        <a href="#" onclick="navigate('hollywood')">Hollywood</a>
+        <a href="#" onclick="navigate('asia')">Asia</a>
+        <a href="#" onclick="navigate('horror')">Horror</a>
+        <a href="#" onclick="navigate('animasi')">Animasi</a>
+      </div>
+      <div class="footer-col">
+        <h4>Series</h4>
+        <a href="#" onclick="navigate('series-kdrama')">K-Drama</a>
+        <a href="#" onclick="navigate('series-indo')">Indo Drama</a>
+        <a href="#" onclick="navigate('series-anime')">Anime</a>
+        <a href="#" onclick="navigate('series-barat')">Barat</a>
+        <a href="#" onclick="navigate('series-cdrama')">C-Drama</a>
+        <a href="#" onclick="navigate('series-thai')">Thai-Drama</a>
+      </div>
+      <div class="footer-col">
+        <h4>Tentang</h4>
+        <p>Movie Free by R - Website nonton film streaming gratis. Data dari MovieBox API via Sonzai X.</p>
+      </div>
+    </div>
+    <div class="footer-bottom"><p>&copy; 2026 Movie Free by R</p></div>
+  </div>
+</footer>
+
+<!-- VIDEO PLAYER MODAL -->
+<div class="player-overlay" id="videoModal" onclick="closeModal(event)">
+  <div class="player-topbar">
+    <span class="player-title" id="modalTitle">Player</span>
+    <button class="player-close" onclick="closeModal()">&times;</button>
+  </div>
+  <div class="player-stage">
+    <video id="videoPlayer" controls playsinline></video>
+    <div class="player-loading" id="playerLoading">
+      <div class="loader"></div>
+      <span>Memuat video...</span>
+    </div>
+  </div>
+  <div class="player-bottom">
+    <a id="downloadBtnBottom" href="#" target="_blank" class="btn-download"><i class="fas fa-download"></i> Download Video</a>
+  </div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
